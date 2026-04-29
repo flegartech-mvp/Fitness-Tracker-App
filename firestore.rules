@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── User profile ──────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Only the owning authenticated user may read their profile.
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // Initial profile creation (registration) is allowed from the client.
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      // Profile updates are allowed, with two restrictions:
+      //
+      // 1. Legacy Stripe fields (isPro, subscriptionStatus, stripeCustomerId) are
+      //    admin-only — only Cloud Functions may write them.
+      //
+      // 2. PayPal premium fields (premiumType, premiumExpiry, premiumWorkoutsRemaining,
+      //    savedStreak, savedStreakExpiry, streakRestoresUsed) are intentionally
+      //    client-writable because paypal.me has no server-side webhook capability.
+      //    This is a trust-based MVP model; tighten this if you switch to PayPal's
+      //    full REST API later (at which point route writes through Cloud Functions).
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['isPro', 'subscriptionStatus', 'stripeCustomerId']);
+
+      // ── Workouts subcollection ──────────────────────────────────────────────
+      match /workouts/{workoutId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // ── Weekly challenge subcollection ─────────────────────────────────────
+      match /weeklyChallenge/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // ── Analytics events ───────────────────────────────────────────────────
+      // Clients may append events but never read or mutate them.
+      match /analyticsEvents/{eventId} {
+        allow create: if request.auth != null && request.auth.uid == userId;
+        allow read, update, delete: if false;
+      }
+    }
+
+    // Block every other path — nothing else should be client-accessible.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
