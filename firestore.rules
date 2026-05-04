@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function validDisplayName(name) {
+      return name is string && name.size() > 0 && name.size() <= 80;
+    }
+
+    function validInitialProfile(userId) {
+      return request.resource.data.keys().hasOnly([
+          'uid',
+          'email',
+          'displayName',
+          'totalXP',
+          'level',
+          'streak',
+          'lastWorkoutDate',
+          'streakFreezes',
+          'totalWorkouts',
+          'totalVolume',
+          'totalPRs',
+          'achievements',
+          'levelRewards',
+          'dailyXP',
+          'dailyXPDate',
+          'isPro',
+          'subscriptionStatus',
+          'premiumType',
+          'premiumExpiry',
+          'premiumWorkoutsRemaining',
+          'savedStreak',
+          'savedStreakExpiry',
+          'streakRestoresUsed',
+          'createdAt'
+        ])
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && validDisplayName(request.resource.data.displayName)
+        && request.resource.data.totalXP == 0
+        && request.resource.data.level == 0
+        && request.resource.data.streak == 0
+        && request.resource.data.lastWorkoutDate == null
+        && request.resource.data.streakFreezes == 1
+        && request.resource.data.totalWorkouts == 0
+        && request.resource.data.totalVolume == 0
+        && request.resource.data.totalPRs == 0
+        && request.resource.data.achievements is list
+        && request.resource.data.achievements.size() == 0
+        && request.resource.data.levelRewards is list
+        && request.resource.data.levelRewards.size() == 0
+        && request.resource.data.dailyXP == 0
+        && request.resource.data.dailyXPDate == null
+        && request.resource.data.isPro == false
+        && request.resource.data.subscriptionStatus == 'inactive'
+        && request.resource.data.premiumType == null
+        && request.resource.data.premiumExpiry == null
+        && request.resource.data.premiumWorkoutsRemaining == 0
+        && request.resource.data.savedStreak == 0
+        && request.resource.data.savedStreakExpiry == null
+        && request.resource.data.streakRestoresUsed == 0
+        && request.resource.data.createdAt == request.time;
+    }
+
+    function validAnalyticsEvent() {
+      return request.resource.data.keys().hasOnly([
+          'eventName',
+          'params',
+          'createdAt',
+          'expireAt'
+        ])
+        && request.resource.data.eventName is string
+        && request.resource.data.eventName.size() > 0
+        && request.resource.data.eventName.size() <= 80
+        && request.resource.data.params is map
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expireAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read: if owns(userId);
+      allow create: if owns(userId) && validInitialProfile(userId);
+
+      // Only harmless profile edits are client-writable. Workouts, XP, streaks,
+      // achievements, challenges, and premium entitlements are written by
+      // trusted Cloud Functions using the Admin SDK.
+      allow update: if owns(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+        && validDisplayName(request.resource.data.displayName);
+
+      allow delete: if false;
+
+      match /workouts/{workoutId} {
+        allow read: if owns(userId);
+        allow create, update, delete: if false;
+      }
+
+      match /weeklyChallenge/{docId} {
+        allow read: if owns(userId);
+        allow create, update, delete: if false;
+      }
+
+      match /analyticsEvents/{eventId} {
+        allow create: if owns(userId) && validAnalyticsEvent();
+        allow read, update, delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

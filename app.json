@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "FitQuest",
+    "slug": "fitquest",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#08110c"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.flegartech.fitquest"
+    },
+    "android": {
+      "package": "com.flegartech.fitquest",
+      "versionCode": 1
+    },
+    "plugins": [
+      "expo-haptics"
+    ]
+  }
+}
